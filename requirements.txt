@@ -1,0 +1,10 @@
+tensorboard
+tensorboardX
+opencv-python==4.4.0.46
+matplotlib==3.3.2
+pycocotools
+scipy
+progress
+scikit-image
+chumpy
+
