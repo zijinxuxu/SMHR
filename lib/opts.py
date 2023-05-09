@@ -12,12 +12,14 @@ class opts(object):
     self.parser = argparse.ArgumentParser()
     # basic experiment setting
     self.parser.add_argument('--local_rank', default=-1, type=int,
-                    help='node rank for distributed training')
+                    help='node rank for distributed training, local gpu id')
+    self.parser.add_argument('--world_size', type=int, help="num of processes")
+    self.parser.add_argument('--master_port', type=int, help="master_port")
     self.parser.add_argument('--nproc_per_node', default=-1, type=int,
                     help='node rank for distributed training')
     self.parser.add_argument('--node_rank', default=-1, type=int,
                     help='node rank for distributed training')                    
-    self.parser.add_argument('task', default='detreg',
+    self.parser.add_argument('--task', default='detreg',
                              help='detreg')
     self.parser.add_argument('--dataset', default='Joint',
                              help='widerface, fddb or joint dataset')
@@ -45,7 +47,7 @@ class opts(object):
     # system
     self.parser.add_argument('--gpus', default='0',
                              help='-1 for CPU, use comma for multiple gpus')
-    self.parser.add_argument('--num_workers', type=int, default=8,
+    self.parser.add_argument('--num_workers', type=int, default=4,
                              help='dataloader threads. 0 for single-thread.')
     self.parser.add_argument('--not_cuda_benchmark', action='store_true',
                              help='disable when the input size is not fixed.')
@@ -66,13 +68,13 @@ class opts(object):
                                   '0 for no conv layer'
                                   '-1 for default setting: '
                                   '64 for resnets and 256 for dla.')
-    self.parser.add_argument('--down_ratio', type=int, default=8,
+    self.parser.add_argument('--down_ratio', type=int, default=4,
                              help='output stride.')
 
     # train
-    self.parser.add_argument('--lr', type=float, default=1e-3,
+    self.parser.add_argument('--lr', type=float, default=1e-4,
                              help='learning rate for batch size 32.')
-    self.parser.add_argument('--lr_step', type=str, default='30,90,120',
+    self.parser.add_argument('--lr_step', type=str, default='30,60,90',
                              help='drop learning rate by 10.')
     self.parser.add_argument('--num_epochs', type=int, default=150,
                              help='total training epochs.')
@@ -88,13 +90,13 @@ class opts(object):
     # ctdet
     self.parser.add_argument('--reg_loss', default='l1',
                              help='regression loss: sl1 | l1 | l2')
-    self.parser.add_argument('--center_weight', type=float, default=20.,
+    self.parser.add_argument('--center_weight', type=float, default=100.,
                              help='loss weight for center heatmaps.')
     self.parser.add_argument('--heatmaps_weight', type=float, default=10.,
                              help='loss weight for keypoint heatmaps.')  
 
-    # self.parser.add_argument('--off_weight', type=float, default=1,
-    #                          help='loss weight for keypoint local offsets.')
+    self.parser.add_argument('--off_weight', type=float, default=1,
+                             help='loss weight for keypoint local offsets.')
     # self.parser.add_argument('--wh_weight', type=float, default=0.1,
     #                          help='loss weight for bounding box size.')
 
@@ -111,11 +113,11 @@ class opts(object):
 
     self.parser.add_argument('--reproj_loss', action='store_true',
                              help='re-projection loss')
-    self.parser.add_argument('--reproj_weight', type=float, default=20.,
+    self.parser.add_argument('--reproj_weight', type=float, default=10.,
                              help='re-projection_weight for re-projection loss')
     self.parser.add_argument('--photometric_loss', action='store_true',
                              help='photometric loss')
-    self.parser.add_argument('--photometric_weight', type=float, default=1.,
+    self.parser.add_argument('--photometric_weight', type=float, default=100.,
                              help='photometric loss for reconstruction for reconstruction')
     self.parser.add_argument('--seg_weight', type=float, default=20.,
                              help='segmentation loss for reconstruction for reconstruction')                             
@@ -123,17 +125,17 @@ class opts(object):
                              help='middle bone scale loss')
     self.parser.add_argument('--bone_weight', type=float, default=1.,
                              help='bone_weight for bone scale loss')
-    self.parser.add_argument('--bone_dir_weight', type=float, default=50.,
+    self.parser.add_argument('--bone_dir_weight', type=float, default=100.,
                              help='bone_dir_weight for bone dir loss')    
-    self.parser.add_argument('--pose_weight', type=float, default=50.,
+    self.parser.add_argument('--pose_weight', type=float, default=10.,
                              help='pose_weight for 3d pose loss') 
-    self.parser.add_argument('--mano_weight', type=float, default=10.,
+    self.parser.add_argument('--mano_weight', type=float, default=100.,
                              help='mano_weight for mano params loss')                                                           
     self.parser.add_argument('--use_skin_only', action='store_true',
                              help='if true, we only use skin area')
     self.parser.add_argument('--var_weight', type=float, default=0.001,
                              help='skin area variance')
-    self.parser.add_argument('--norm_weight', type=float, default=100.,
+    self.parser.add_argument('--norm_weight', type=float, default=1000.,
                              help='normalization')
     self.parser.add_argument('--perceptual_loss', action='store_true',
                              help='using facenet to add perceptual loss')
@@ -258,7 +260,8 @@ class opts(object):
     opt.num_classes = dataset.num_classes
 
     if opt.task in ['simplified', 'artificial','interact']:
-      opt.heads = {'hm': 1}
+      hm_num = 2 if opt.task == 'interact' else 1
+      opt.heads = {'hm': hm_num} # left/right
       opt.heads.update({'params': (61)*2})
       if opt.photometric_loss:
         opt.heads.update({'texture': 778*3})
@@ -270,7 +273,8 @@ class opts(object):
       if opt.gcn_decoder:
         opt.heads.update({'gcn_params': 128})
       if opt.off:
-        opt.heads.update({'off': 136})
+        opt.heads.update({'hm_off': 2})
+        opt.heads.update({'lms21_off': 21*2})
     else:
       assert 0, 'task not defined!'
     print('heads', opt.heads)

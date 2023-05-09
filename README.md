@@ -2,7 +2,7 @@
 # SMHR: Single-stage Multiple Hand Reconstruction with weak supervision
 
 ## Introduction
-* This repo is official **[PyTorch](https://pytorch.org)** implementation of **[End-to-end Weakly-supervised Multiple 3D Hand Mesh Reconstruction from Single Image](https://arxiv.org/abs/2204.08154)**. 
+* This repo is official **[PyTorch](https://pytorch.org)** implementation of **[End-to-end Weakly-supervised Single-stage Multiple 3D Hand Mesh Reconstruction from a Single RGB Image](https://arxiv.org/abs/2204.08154)**. 
 
 ### Overview of the proposed framework
 <p align="middle">
@@ -32,11 +32,11 @@
 The `${ROOT}` is described as below.
 ```
 ${ROOT}
+|-- assets
 |-- data
 |-- lib
 |-- outputs
 |-- scripts
-|-- assets
 ```
 * `data` contains packaged dataset loaders and soft links to the datasets' image and annotation directories.
 * `lib` contains main codes for SMHR, including dataset loader code, network model, training code and other utils files.
@@ -60,7 +60,6 @@ ${ROOT}
 |   |-- MultiHand
 |   |***.pth 
 |   |***.pkl
-|   |joint_dataset.txt
 ```
 * Download the FreiHAND dataset from the [[website](https://lmb.informatik.uni-freiburg.de/resources/datasets/FreihandDataset.en.html)]
 * Download the HO3D dataset from the [[website](https://www.tugraz.at/index.php?id=40231)]
@@ -71,18 +70,13 @@ ${ROOT}
 ## Demo on single/multiple hand images
 ### Single Hand dataset(FreiHAND)
 *  Modify `scripts/demo.sh` to Single-FreiHAND setting. 
-    task = 'simplified',dataset='FreiHAND',Input_RES=224,CHECKPOINTS_PATH='${ROOT}/data/FreiHAND-2d-simplified.pth', comment out #L30 '--pick_hand'
+    task = 'simplified',dataset='FreiHAND',Input_RES=224,CHECKPOINTS_PATH='${ROOT}/data/FreiHand_2d_pho.pth', 
+    comment out #L35 '--pick_hand'
 *  Modify `demo.py` to use images from FreiHAND dataset. 
     #L80:   base_dir = 'assets/Single/FreiHAND'
 *  run ` bash scripts/demo.sh`
 *  You can see rendered outputs in `outputs/FreiHAND/`.
-### Single Hand dataset(HO3D)
-*  Modify `scripts/demo.sh` to Single-HO3D setting. 
-    task = 'simplified',dataset='HO3D',Input_RES=224,CHECKPOINTS_PATH='${ROOT}/data/HO3D-2d-simplified.pth', comment out #L30 '--pick_hand'
-*  Modify `demo.py` to use images from HO3D dataset. 
-    #L80:   base_dir = 'assets/Single/HO3D'
-*  run ` bash scripts/demo.sh`
-*  You can see rendered outputs in `outputs/HO3D/`.
+
 ### Multiple Hand (Joint dataset)
 *  Modify `scripts/demo.sh` to Multi-hand setting. 
     task = 'artificial',dataset='Joint',Input_RES=384,CHECKPOINTS_PATH='${ROOT}/data/FreiHAND-2d-artificial.pth', uncomment #L30 '--pick_hand'
@@ -92,15 +86,29 @@ ${ROOT}
 *  You can see rendered outputs in `outputs/Multi/`.
 
 
-### Training and Evaluation
-    Coming Soon...
+### Training
+* Prepare training/evaluation data.
+We recommend placing the dataset under the 'data' path via a soft link.
+    e.g.   `ln -s /home/public/FreiHAND data/FreiHAND`.
+* Modify the corresponding configuration parameters in `scripts/train.sh` as needed.
+* You can adjust the range of data augmentation in 'lib/datasets/simplified.py' and loss weights in 'lib/opt.py' to achieve better accuracy.
+* In the `${ROOT}` folder, run `bash script/train.sh`
 
 
+### Evaluation
+* Modify the corresponding configuration parameters in `scripts/eval.sh` as needed.
+* In the `${ROOT}` folder, run `bash script/eval.sh`
 
-### Outputs of Single Hand images
+
+### Outputs of Single Hand images (HO3D)
 <p align="middle">
     <img src="assets/SingleHandInput.gif", width="224" height="224">
     <img src="assets/SingleHandOutput.gif", width="224" height="224">
+</p>
+
+### Outputs of Single Hand images (FreiHAND)
+<p align="middle">
+    <img src="assets/QualitativeMeshFreiHAND.png">
 </p>
 
 ### Outputs of Multiple Hand images
@@ -111,11 +119,15 @@ ${ROOT}
 ## Citation
 If you find our work useful in your research, please consider citing:
 ```
-@article{Ren2022EndtoendWM,
-  title={End-to-end Weakly-supervised Multiple 3D Hand Mesh Reconstruction from Single Image},
+@article{Ren2023EndtoEndWS,
+  title={End-to-end weakly-supervised single-stage multiple 3D hand mesh reconstruction from a single RGB image},
   author={Jinwei Ren and Jianke Zhu and Jialiang Zhang},
-  journal={ArXiv},
-  year={2022},
-  volume={abs/2204.08154}
+  journal = {Computer Vision and Image Understanding},
+  volume = {232},
+  pages = {103706},
+  year = {2023},
+  issn = {1077-3142},
+  doi = {https://doi.org/10.1016/j.cviu.2023.103706},
+  url = {https://www.sciencedirect.com/science/article/pii/S1077314223000863},
 }
 ```

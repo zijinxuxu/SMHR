@@ -170,8 +170,8 @@ class ManoModel(nn.Module):
                 model_data = np.load(mano_path, allow_pickle=True)
             else:
                 raise ValueError('Unknown extension: {}'.format(ext))
-            for key, val in model_data.items():
-                print('key: ', key)
+            # for key, val in model_data.items():
+            #     print('key: ', key)
 
 
         # self.tip_ids = TIP_IDS['mano'] # this is for different tips , if not well, change to false.
@@ -436,7 +436,7 @@ class ManoModel(nn.Module):
         if using_wrist_rotate == False:
             batch_size = max(betas.shape[0], hand_pose.shape[0])
             device = global_orient.device
-            wrist_rot = torch.tensor([3.14159,0.,0.]).expand([batch_size, -1]).to(device)
+            wrist_rot = torch.tensor([0.,0.,0.]).expand([batch_size, -1]).to(device)
 
             # assume wrist fixed, rotate around center. other than wrist.
             full_pose = torch.cat([wrist_rot, 
@@ -471,7 +471,7 @@ class ManoModel(nn.Module):
             joints = torch.matmul(joints,Rots.transpose(2, 1)) #.contiguous().view(batch_size,-1)        
 
         if apply_trans:
-            # add_trans = (transl - joints[:,9]).unsqueeze(dim=1).detach()
+            transl = (transl - joints[:,9]).detach()
             joints = joints + transl.unsqueeze(dim=1)
             vertices = vertices + transl.unsqueeze(dim=1)
 

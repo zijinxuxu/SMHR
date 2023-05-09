@@ -2,11 +2,11 @@
 set -ex
 
 # Training
-GPU_ID=1
+GPU_ID=0
 NAME='SMHR_eval'
 task='simplified' 
-mode='eval' # train, test, eval
-dataset='Joint' # modify datasets in data/joint_dataset.txt
+mode='test' # train, test, eval
+dataset='FreiHAND' # modify datasets in data/joint_dataset.txt
 # Network configuration
 
 BATCH_SIZE=1
@@ -14,10 +14,11 @@ BATCH_SIZE=1
 # Reconstruction resolution
 Input_RES=224 # 224,512
 
-CHECKPOINTS_PATH='/home/zijinxuxu/codes/SMHR/outputs/logs/simplified/default/logs_2022-07-06-19-43-/model_150.pth'
+CHECKPOINTS_PATH='data/Single_pho.pth'
+
 # command
-CUDA_VISIBLE_DEVICES=${GPU_ID} python main.py \
-    ${task} \
+CUDA_VISIBLE_DEVICES=${GPU_ID} python -m torch.distributed.launch --master_port 12508 --nproc_per_node 1 main.py \
+    --task ${task} \
     --gpus 0 \
     --mode ${mode} \
     --dataset ${dataset} \
@@ -25,12 +26,14 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python main.py \
     --default_resolution ${Input_RES} \
     --reproj_loss \
     --brightness \
-    --no_det \
     --bone_loss \
     --arch csp_50 \
     --avg_center \
+    --config_info Single-2d-right-pers-pho \
+    --photometric_loss \
     --load_model ${CHECKPOINTS_PATH} \
-    # --heatmaps
+    # --lr 5e-5 \
+    # --load_model ${CHECKPOINTS_PATH} \
     # set to true when using pca rather than euler angles
     # --using_pca \ 
     # set to true when using heatmaps of keypoints

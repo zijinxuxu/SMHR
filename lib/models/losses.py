@@ -380,7 +380,34 @@ class NormLoss(nn.Module):
 
 
   # def forward(self, output, mask, ind):
-  def forward(self, pose_coeff_l, pose_coeff_r,betas_coeff_l,betas_coeff_r, mask):
+  def forward(self, pose_coeff_r,betas_coeff_r):
+    device = pose_coeff_r.device
+    # fewer than 0.5 might be too large for renderring
+    # trans_z_loss = torch.clamp(0.2 - global_transl_coeff_l[:,2], 0) + torch.clamp(0.2 - global_transl_coeff_r[:,2], 0) \
+    #   + torch.clamp(global_transl_coeff_l[:,2] - 2 , 0) +  torch.clamp(global_transl_coeff_r[:,2] - 2, 0)
+    # trans_z_loss = torch.clamp(0.2 - global_transl_coeff_r[:,2], 0) 
+    left_min_max_pose = (torch.true_divide(get_left_pose_threshold(), 180) * math.pi).to(device)
+    right_min_max_pose = (torch.true_divide(get_right_pose_threshold(), 180) * math.pi).to(device)    
+    pose = torch.clamp(right_min_max_pose[:,0] - pose_coeff_r , 0) +  torch.clamp(pose_coeff_r - right_min_max_pose[:,1] , 0)
+    # pose = torch.clamp(left_min_max_pose[:,0] - pose_coeff_l , 0) +  torch.clamp(pose_coeff_l - left_min_max_pose[:,1] , 0) \
+    #   + torch.clamp(right_min_max_pose[:,0] - pose_coeff_r , 0) +  torch.clamp(pose_coeff_r - right_min_max_pose[:,1] , 0)
+    pose_loss = torch.mean(pose,dim=1) 
+    # shape = torch.mean(betas_coeff_l**2,dim=1) + torch.mean(betas_coeff_r**2,dim=1)
+    shape_loss = torch.mean(betas_coeff_r**2,dim=1)
+
+    # consider add scale term, bone_9-10 = 2.82cm, factor=10000.
+    # mask = mask.float()
+    # loss = (1 * shape  + 10 * pose) * mask
+    # loss = ((pose + 0.1 * shape) * mask).sum() / (mask.sum() + 1e-8)
+    return pose_loss+shape_loss*0.1
+
+class NormLossLeft(nn.Module):
+  def __init__(self):
+    super(NormLossLeft, self).__init__()
+
+
+  # def forward(self, output, mask, ind):
+  def forward(self, pose_coeff_l,betas_coeff_l):
     device = pose_coeff_l.device
     # fewer than 0.5 might be too large for renderring
     # trans_z_loss = torch.clamp(0.2 - global_transl_coeff_l[:,2], 0) + torch.clamp(0.2 - global_transl_coeff_r[:,2], 0) \
@@ -388,19 +415,19 @@ class NormLoss(nn.Module):
     # trans_z_loss = torch.clamp(0.2 - global_transl_coeff_r[:,2], 0) 
     left_min_max_pose = (torch.true_divide(get_left_pose_threshold(), 180) * math.pi).to(device)
     right_min_max_pose = (torch.true_divide(get_right_pose_threshold(), 180) * math.pi).to(device)    
-      # pose = torch.clamp(right_min_max_pose[:,0] - pose_coeff_r , 0) +  torch.clamp(pose_coeff_r - right_min_max_pose[:,1] , 0)
-    pose = torch.clamp(left_min_max_pose[:,0] - pose_coeff_l , 0) +  torch.clamp(pose_coeff_l - left_min_max_pose[:,1] , 0) \
-      + torch.clamp(right_min_max_pose[:,0] - pose_coeff_r , 0) +  torch.clamp(pose_coeff_r - right_min_max_pose[:,1] , 0)
-    pose = torch.mean(pose,dim=1) 
-    shape = torch.mean(betas_coeff_l**2,dim=1) + torch.mean(betas_coeff_r**2,dim=1)
-    # shape = torch.mean(betas_coeff_r**2,dim=1)
+    pose = torch.clamp(left_min_max_pose[:,0] - pose_coeff_l , 0) +  torch.clamp(pose_coeff_l - left_min_max_pose[:,1] , 0)
+    # pose = torch.clamp(left_min_max_pose[:,0] - pose_coeff_l , 0) +  torch.clamp(pose_coeff_l - left_min_max_pose[:,1] , 0) \
+    #   + torch.clamp(right_min_max_pose[:,0] - pose_coeff_r , 0) +  torch.clamp(pose_coeff_r - right_min_max_pose[:,1] , 0)
+    pose_loss = torch.mean(pose,dim=1) 
+    # shape = torch.mean(betas_coeff_l**2,dim=1) + torch.mean(betas_coeff_r**2,dim=1)
+    shape_loss = torch.mean(betas_coeff_l**2,dim=1)
 
     # consider add scale term, bone_9-10 = 2.82cm, factor=10000.
-    mask = mask.float()
+    # mask = mask.float()
     # loss = (1 * shape  + 10 * pose) * mask
-    loss = ((pose + 0.1 * shape) * mask).sum() / (mask.sum() + 1e-8)
-    return loss
-
+    # loss = ((pose + 0.1 * shape) * mask).sum() / (mask.sum() + 1e-8)
+    return pose_loss+shape_loss*0.1
+  
 class VarRegLoss(nn.Module):
     '''Regression loss for an output tensor
       Arguments:

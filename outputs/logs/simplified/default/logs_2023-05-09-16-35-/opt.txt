@@ -1,0 +1,103 @@
+==> torch version: 1.6.0
+==> cudnn version: 7603
+==> Cmd:
+['main.py', '--local_rank=0', '--task', 'simplified', '--gpus', '0', '--mode', 'train', '--dataset', 'FreiHAND', '--batch_size', '4', '--default_resolution', '224', '--reproj_loss', '--brightness', '--bone_loss', '--arch', 'csp_50', '--avg_center', '--config_info', 'Single-2d-right-pers-pho']
+==> Opt:
+  BFM: BFM/mSEmTFK68etc.chj
+  K: 20
+  activation: LeakyReLU
+  arch: csp_50
+  avg_center: True
+  batch_size: 4
+  bone_dir_weight: 100.0
+  bone_loss: True
+  bone_weight: 1.0
+  brightness: True
+  cache_path: data
+  center_only: False
+  center_weight: 100.0
+  chunk_sizes: [4]
+  coma_cache: bfm_cache/var.pkl
+  config_info: Single-2d-right-pers-pho
+  cv2_show: False
+  dataset: FreiHAND
+  debug: False
+  debug_dir: /home/zijinxuxu/codes/SMHR/outputs/logs/simplified/default/debug
+  default_resolution: 224
+  discrepancy: False
+  discrepancy_weight: 0.01
+  down_ratio: 4
+  downsampling_factors: 4, 4, 4, 4, 4
+  exp_dir: /home/zijinxuxu/codes/SMHR/outputs/logs/simplified
+  exp_id: default
+  extra: 
+  gcn_decoder: False
+  gcn_network: Coma
+  gpus: [0]
+  gpus_str: 0
+  gradual_lr: False
+  head_conv: 256
+  heads: {'hm': 1, 'params': 122}
+  heatmaps: False
+  heatmaps_weight: 10.0
+  in_channels: 3
+  input_res: 224
+  iterations: False
+  latent_heatmap: False
+  load_G_model: 
+  load_ST_model: 
+  load_S_model: 
+  load_T_model: 
+  load_model: 
+  local_rank: 0
+  lr: 0.0001
+  lr_step: [30, 60, 90]
+  mano_weight: 100.0
+  master_batch_size: 4
+  master_port: None
+  mean: [[[0.485 0.456 0.406]]]
+  mode: train
+  n_layers: 5
+  no_det: False
+  node_rank: -1
+  norm_weight: 1000.0
+  not_cuda_benchmark: False
+  nproc_per_node: -1
+  num_classes: 1
+  num_conv_filters: 16, 16, 32, 32, 64, 64
+  num_epochs: 150
+  num_iters: -1
+  num_pca_comps: 30
+  num_stacks: 1
+  num_workers: 4
+  off: False
+  off_weight: 1
+  optimizer: Adam
+  output_path: /home/zijinxuxu/codes/SMHR
+  perceptual_loss: False
+  perceptual_weight: 0.01
+  photometric_loss: False
+  photometric_weight: 100.0
+  pick_hand: False
+  polygon_order: 6, 6, 6, 6, 6, 6
+  pose_weight: 10.0
+  pre_fix: data
+  print_iter: 20
+  reg_loss: l1
+  reproj_loss: True
+  reproj_weight: 10.0
+  root_dir: /home/zijinxuxu/codes/SMHR
+  save_dir: /home/zijinxuxu/codes/SMHR/outputs/logs/simplified/default
+  seed: 317
+  seg_weight: 20.0
+  start_epoch: 0
+  std: [[[0.229 0.224 0.225]]]
+  switch: False
+  task: simplified
+  template_fname: template/template.obj
+  time_str: 2023-05-09-16-35-
+  use_skin_only: False
+  using_pca: False
+  var_weight: 0.001
+  world_size: None
+  z: 64

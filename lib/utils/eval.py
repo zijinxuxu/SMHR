@@ -203,14 +203,14 @@ def _search_pred_file(pred_path, pred_file_name):
         raise Exception('Giving up, because its not clear which file to evaluate.')
 
 
-def main(gt_xyz_list, gt_verts_list, pred_xyz_list, pred_verts_list, output_dir, pred_file_name=None, set_name=None):
+def main(gt_path, pred_xyz_list, pred_verts_list, output_dir, pred_file_name=None, set_name=None):
     if pred_file_name is None:
         pred_file_name = 'pred.json'
     if set_name is None:
         set_name = 'evaluation'
 
-    # # load eval annotations
-    # xyz_list, verts_list = json_load(os.path.join(gt_path, '%s_xyz.json' % set_name)), json_load(os.path.join(gt_path, '%s_verts.json' % set_name))
+    # load eval annotations
+    gt_xyz_list, gt_verts_list = json_load(os.path.join(gt_path, '%s_xyz.json' % set_name)), json_load(os.path.join(gt_path, '%s_verts.json' % set_name))
 
     # # load predicted values
     # pred_file = _search_pred_file(pred_path, pred_file_name)
@@ -367,17 +367,17 @@ def main(gt_xyz_list, gt_verts_list, pred_xyz_list, pred_verts_list, output_dir,
             fo.write('%s\n' % t)
     print('Scores written to: %s' % score_path)
 
-    createHTML(
-        output_dir,
-        [
-            curve(thresh_xyz*100, pck_xyz, 'Distance in cm', 'Percentage of correct keypoints', 'PCK curve for aligned keypoint error'),
-            curve(thresh_xyz_procrustes_al*100, pck_xyz_procrustes_al, 'Distance in cm', 'Percentage of correct keypoints', 'PCK curve for procrustes aligned keypoint error'),
-            curve(thresh_xyz_sc_tr_al * 100, pck_xyz_sc_tr_al, 'Distance in cm',
-                  'Percentage of correct keypoints', 'PCK curve for scale-translation aligned keypoint error'),
-            curve(thresh_mesh*100, pck_mesh, 'Distance in cm', 'Percentage of correct vertices', 'PCV curve for mesh error'),
-            curve(thresh_mesh_al*100, pck_mesh_al, 'Distance in cm', 'Percentage of correct vertices', 'PCV curve for aligned mesh error')
-        ]
-    )
+    # createHTML(
+    #     output_dir,
+    #     [
+    #         curve(thresh_xyz*100, pck_xyz, 'Distance in cm', 'Percentage of correct keypoints', 'PCK curve for aligned keypoint error'),
+    #         curve(thresh_xyz_procrustes_al*100, pck_xyz_procrustes_al, 'Distance in cm', 'Percentage of correct keypoints', 'PCK curve for procrustes aligned keypoint error'),
+    #         curve(thresh_xyz_sc_tr_al * 100, pck_xyz_sc_tr_al, 'Distance in cm',
+    #               'Percentage of correct keypoints', 'PCK curve for scale-translation aligned keypoint error'),
+    #         curve(thresh_mesh*100, pck_mesh, 'Distance in cm', 'Percentage of correct vertices', 'PCV curve for mesh error'),
+    #         curve(thresh_mesh_al*100, pck_mesh_al, 'Distance in cm', 'Percentage of correct vertices', 'PCV curve for aligned mesh error')
+    #     ]
+    # )
 
     print('Evaluation complete.')
 

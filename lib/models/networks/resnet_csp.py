@@ -239,15 +239,15 @@ class PoseResNet(nn.Module):
                                bias=False)
         # try to add heatmap channel 21
         batch_size = opt.batch_size // len(opt.gpus)
-        if 'params' in self.opt.heads:
-            out_feature_size = self.opt.input_res // 8 
-            init_pose_param = torch.zeros((batch_size, self.opt.heads['params'],out_feature_size,out_feature_size))
-            self.register_buffer('mean_theta', init_pose_param.float())
+        # if 'params' in self.opt.heads:
+        #     out_feature_size = self.opt.input_res // self.opt.down_ratio
+        #     init_pose_param = torch.zeros((batch_size, self.opt.heads['params'],out_feature_size,out_feature_size))
+        #     self.register_buffer('mean_theta', init_pose_param.float())
         if opt.iterations:
             self.iterations = 3
         else:
             self.iterations = 1
-
+        self.global_feature_dim = 256
         # CMR like backbone
         self.relation = [[4, 8], [4, 12], [4, 16], [4, 20], [8, 12], [8, 16], [8, 20], [12, 16], [12, 20], [16, 20], [1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]]
         backbone, self.latent_size = self.get_backbone("resnet18")
@@ -285,14 +285,15 @@ class PoseResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         if self.opt.arch == 'csp_18':
-            self.p3 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-            self.p4 = nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1)
-            self.p5 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=4, padding=0)
+            self.p2 = nn.Conv2d(64, self.global_feature_dim, kernel_size=3, stride=1, padding=1)
+            self.p3 = nn.ConvTranspose2d(128, self.global_feature_dim, kernel_size=4, stride=2, padding=1)
+            self.p4 = nn.ConvTranspose2d(256, self.global_feature_dim, kernel_size=4, stride=4, padding=0)
+            self.p5 = nn.ConvTranspose2d(512, self.global_feature_dim, kernel_size=8, stride=8, padding=0)
         else: # csp_50
-            self.p3 = nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
-            self.p4 = nn.ConvTranspose2d(1024, 256, kernel_size=4, stride=2, padding=1)
-            self.p5 = nn.ConvTranspose2d(2048, 256, kernel_size=4, stride=4, padding=0)
-
+            self.p2 = nn.Conv2d(256, self.global_feature_dim, kernel_size=3, stride=1, padding=1)
+            self.p3 = nn.ConvTranspose2d(512, self.global_feature_dim, kernel_size=4, stride=2, padding=1)
+            self.p4 = nn.ConvTranspose2d(1024, self.global_feature_dim, kernel_size=4, stride=4, padding=0)
+            self.p5 = nn.ConvTranspose2d(2048, self.global_feature_dim, kernel_size=8, stride=8, padding=0)
         nn.init.xavier_normal_(self.p3.weight)
         nn.init.xavier_normal_(self.p4.weight)
         nn.init.xavier_normal_(self.p5.weight)
@@ -300,40 +301,34 @@ class PoseResNet(nn.Module):
         nn.init.constant_(self.p4.bias, 0)
         nn.init.constant_(self.p5.bias, 0)
 
-        self.p3_l2 = L2Norm(256, 10)
-        self.p4_l2 = L2Norm(256, 10)
-        self.p5_l2 = L2Norm(256, 10)
-
-        self.feat = nn.Conv2d(768, 256, kernel_size=3, stride=1, padding=1, bias=False)
-        self.feat_bn = nn.BatchNorm2d(256, momentum=0.01)
+        # self.p3_l2 = L2Norm(256, 10)
+        # self.p4_l2 = L2Norm(256, 10)
+        # self.p5_l2 = L2Norm(256, 10)
+        self.p2_l2 = L2Norm(self.global_feature_dim, 10)
+        self.p3_l2 = L2Norm(self.global_feature_dim, 10)
+        self.p4_l2 = L2Norm(self.global_feature_dim, 10)
+        self.p5_l2 = L2Norm(self.global_feature_dim, 10)
+        self.feat = nn.Conv2d(self.global_feature_dim*3, self.global_feature_dim, kernel_size=3, stride=1, padding=1, bias=False)
+        self.feat_bn = nn.BatchNorm2d(self.global_feature_dim, momentum=0.01)
         self.feat_act = nn.ReLU(inplace=True)
 
         # self.depthwise = nn.Conv2d(257, 257, kernel_size=3, padding=1, groups=257, bias=False)
         # self.depthwise.weight.data = self.depthwise.weight.data * 0 + 1/9
 
-        for head in sorted(self.heads):
-            num_output = self.heads[head]
+        ### head decoders
+        for head in sorted(self.opt.heads):
+            num_output = self.opt.heads[head]
             # textures = _tranpose_and_gather_feat(output['texture'], batch['ind'])
-            if head_conv > 0:
-                if 'params' in head and opt.iterations:
-                    extra_chanel = num_output
-                else:
-                    extra_chanel = 0
-                fc = nn.Sequential(
-                    nn.Conv2d(256 + extra_chanel, head_conv,
-                            kernel_size=3, padding=1, bias=True),
-                    nn.ReLU(inplace=True),
-                    nn.Conv2d(256, num_output,
-                            kernel_size=1, stride=1, padding=0))
+            if 'params' in head and opt.iterations:
+                extra_chanel = num_output
             else:
-                fc = nn.Sequential(
-                    nn.Conv2d(
-                    in_channels=256,
-                    out_channels=num_output,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0
-                ))
+                extra_chanel = 0
+            fc = nn.Sequential(
+                nn.Conv2d(self.global_feature_dim + extra_chanel, 256,
+                        kernel_size=3, padding=1, bias=True),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(256, num_output,
+                        kernel_size=1, stride=1, padding=0))
 
             if 'hm' in head or 'heatmaps' in head or 'handmap' in head:
                 fc[-1].bias.data.fill_(-4.59)
@@ -441,7 +436,7 @@ class PoseResNet(nn.Module):
         _,_,H,W = y.size()
         return F.upsample(x, size=(H, W), mode='bilinear') + y
 
-    def forward(self, x, heatmaps = None, ind = None): #[b,3,384,384]
+    def forward(self, x, heatmaps = None, ind = None): #[b,3,256,256]
         if self.opt.heatmaps:
             # estimate heatmaps first both in training and test
             z_uv = self.backbone(x)
@@ -451,28 +446,27 @@ class PoseResNet(nn.Module):
             x = self.reduce(x0)
             x = self.maxpool(x)
         else:
-            x = self.conv1(x) # x[b, 64, 192, 192]
+            x = self.conv1(x) # x[b, 64, 128, 128]
             x = self.bn1(x)
             x = self.relu(x)
-            x = self.maxpool(x) # x[b, 64, 96, 96]
+            x = self.maxpool(x) # x[b, 64, 64, 64]
 
-        x1 = self.layer1(x) # x[b, 256, 96, 96]
-
-        x2 = self.layer2(x1) # x[b, 512, 48, 48]
-        p3 = self.p3(x2) #[b, 256, 48, 48]
+        x4 = self.layer1(x) #[b, 256, 64, 64]
+        # p2 = self.p2(x4) #[b, 256, 64, 64]
+        # p2 = self.p2_l2(p2)
+        x3 = self.layer2(x4)#[b, 512, 32, 32]
+        p3 = self.p3(x3) #[b, 256, 64, 64]
         p3 = self.p3_l2(p3)
-
-        x3 = self.layer3(x2) # x[b, 1024, 24, 24]
-        p4 = self.p4(x3) #[b, 256, 48, 48]
+        x2 = self.layer3(x3)#[b, 1024, 16, 16]
+        p4 = self.p4(x2) #[b, 256, 64, 64]
         p4 = self.p4_l2(p4)
-
-        x4 = self.layer4(x3) # x[b, 2048, 12, 12]
-        p5 = self.p5(x4) #[b, 256, 48, 48]
+        x1 = self.layer4(x2)#[b, 2048, 8, 8]
+        p5 = self.p5(x1) #[b, 256, 64, 64]
         p5 = self.p5_l2(p5)
 
-        cat = torch.cat([p3, p4, p5], dim=1) #[b, 768, 48, 48]
+        cat = torch.cat([p3, p4, p5], dim=1) #[b, 1024, 64, 64]
 
-        feat = self.feat(cat) #[b, 256, 48, 48]
+        feat = self.feat(cat) #[b, 256, 64, 64]
         feat = self.feat_bn(feat)
         feat = self.feat_act(feat)
 
@@ -485,30 +479,33 @@ class PoseResNet(nn.Module):
             # ret['uv_pred'] = uv_pred[:, :self.uv_channel]
             # ret['mask_pred'] = uv_pred[:, self.uv_channel]
         for head in self.heads:
-            if 'hm' in ret and ind is None:
-                hms = ret['hm'].clone().detach()
-                hms.sigmoid_()
-                score = 0.5
-                hms = _nms(hms, 5)
-                K = max(int((hms > score).float().sum()),1)
-                if self.opt.input_res == 512 or self.opt.input_res == 384:
-                    K = min(K,10)
-                else:
-                    K = 1     
-                topk_scores, ind, topk_ys, topk_xs = _topk(hms, K)
-            if 'params' in head:
-                # do iterations for pose params
-                thetas = []
-                theta = self.mean_theta
-                for _ in range(self.iterations):
-                    if self.opt.iterations:
-                        total_inputs = torch.cat([feat, theta], 1)
-                    else:
-                        total_inputs = feat
-                    theta = theta + self.__getattr__(head)(total_inputs)
-                    thetas.append(theta)
-                ret[head] = thetas
-                continue              
+            # if 'hm' in ret and ind is None:
+            #     hms = ret['hm'].clone().detach()
+            #     hms.sigmoid_()
+            #     score = 0.5
+            #     hms = _nms(hms, 5)
+            #     K = max(int((hms > score).float().sum()),1)
+            #     if self.opt.input_res == 512 or self.opt.input_res == 384:
+            #         K = min(K,10)
+            #     else:
+            #         K = 1     
+            #     topk_scores, ind, topk_ys, topk_xs = _topk(hms, K)
+            # if 'params' in head:
+            # #     # do iterations for pose params
+            #     thetas = []
+            #     theta = self.__getattr__(head)(feat)
+            #     thetas.append(theta)
+            #     ret[head] = thetas
+            #     theta = self.mean_theta
+            #     for _ in range(self.iterations):
+            #         if self.opt.iterations:
+            #             total_inputs = torch.cat([feat, theta], 1)
+            #         else:
+            #             total_inputs = feat
+            #         theta = theta + self.__getattr__(head)(total_inputs)
+            #         thetas.append(theta)
+            #     ret[head] = thetas
+            #     continue              
             ret[head] = self.__getattr__(head)(feat)
 
         return [ret], ind

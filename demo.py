@@ -38,6 +38,7 @@ import math
 from math import cos, sin
 from utils.utils import drawCirclev2
 import random
+from lib.models.networks.manolayer import ManoLayer
 
 def get_dataset(task):
   if task == 'simplified':
@@ -58,26 +59,45 @@ def seed_torch(seed=0):
   torch.backends.cudnn.benchmark = True
   torch.backends.cudnn.deterministic = True
 
+def projection_batch(scale, trans2d, label3d, img_size=256):
+  """orthodox projection
+  Input:
+      scale: (B)
+      trans2d: (B, 2)
+      label3d: (B x N x 3)
+  Returns:
+      (B, N, 2)
+  """
+  scale = (scale + 3)* img_size  # init to 684, 0.1m to 65pixel
+  if scale.dim() == 1:
+      scale = scale.unsqueeze(-1).unsqueeze(-1)
+  if scale.dim() == 2:
+      scale = scale.unsqueeze(-1)
+  trans2d = trans2d * img_size / 2 + img_size / 2  # bs x 2
+  trans2d = trans2d.unsqueeze(1)
+
+  label2d = scale * label3d[..., :2] + trans2d
+  return label2d  
 
 def main(opt):
   # setup 
   seed_torch(opt.seed)
-  # torch.manual_seed(opt.seed)
-  # torch.backends.cudnn.benchmark = not opt.not_cuda_benchmark
   Dataset = get_dataset(opt.task)
   opt = opts.update_dataset_info_and_set_heads(opt, Dataset)
   print(opt)
   device = torch.device('cuda' if opt.gpus[0] >= 0 else 'cpu')
-
+  # Manorender
   render = ManoRender(opt).cuda().eval()
-
-  print('Creating model...')
+  mano_path = {'left': render.lhm_path,
+              'right': render.rhm_path}  
+  mano_layer = {'right': ManoLayer(mano_path['right'], center_idx=None, use_pca=True),
+                      'left': ManoLayer(mano_path['left'], center_idx=None, use_pca=True)}
+  
   model = create_model(opt.arch, opt.heads, opt.head_conv, opt=opt)
   if opt.load_model != '':
       model = load_model(model, opt.load_model)
   model.cuda().eval()
-  # base_dir = '/media/zijinxuxu/Seagate Backup Plus Drive/Hands_data/OneHand10K/Evaluation_data'
-  base_dir = 'assets/Single/HO3D'
+  base_dir = 'assets/Multi'
   img_list = []
   fileid_list = os.listdir(base_dir)
   for fileid in fileid_list:
@@ -87,9 +107,7 @@ def main(opt):
       # fileid = fileid.split('.')[0]          
       img_rgb_path = os.path.join(base_dir, fileid) # v3 is .jpg  
       img_list.append(img_rgb_path)
-  # img_list = glob.glob('/home/zijinxuxu/Downloads/egohands/egohands_data/_LABELLED_SAMPLES/CARDS_COURTYARD_S_H/*.jpg')
   # img_list = sorted(glob.glob('/mnt/SSD/AFLW/AFLW2000/*.jpg'))
-  # img_list = sorted(glob.glob('/mnt/SSD/LS3D/LS3D-W/300W-Testset-3D/*.png'))
   mean = np.array([0.485, 0.456, 0.406],
                   dtype=np.float32).reshape(1, 1, 3)
   std = np.array([0.229, 0.224, 0.225],
@@ -118,25 +136,27 @@ def main(opt):
       if not os.path.exists(folder):
         os.makedirs(folder)
 
-      outputs, ind = model(pre_img)
-
-      params = _tranpose_and_gather_feat(outputs[0]['params'][-1], ind)
-      # decode part
+      outputs, _ = model(pre_img)
+      # get ind_pred
+      hms = _sigmoid(outputs[0]['hm']).clone().detach()
+      score = 0.5
+      hms = _nms(hms, 5)
+      # K = int((hms[0] > score).float().sum())
+      K = 4 if opt.default_resolution == 384 else 1
+      topk_scores, ind_pred, topk_ys, topk_xs = _topk(hms[:,:1,:,:], K)  
+  
+      params = _tranpose_and_gather_feat(outputs[0]['params'], ind_pred)
       B, C = params.size(0), params.size(1)
       global_orient_coeff_l_up, pose_coeff_l, betas_coeff_l, global_transl_coeff_l_up, \
-          global_orient_coeff_r_up, pose_coeff_r, betas_coeff_r, global_transl_coeff_r_up  = \
-          render.Split_coeff(params.view(-1, params.size(2)), ind.view(-1))
-
-
-      hand_verts_r_up, hand_joints_r_up, full_pose_r = render.Shape_formation(global_orient_coeff_r_up, pose_coeff_r, betas_coeff_r, global_transl_coeff_r_up,'right')              
-      hand_verts_l_up, hand_joints_l_up, full_pose_l = render.Shape_formation(global_orient_coeff_l_up, pose_coeff_l, betas_coeff_l, global_transl_coeff_l_up,'left')
-      lms21_orig_l_up = render.get_Landmarks(hand_joints_l_up)
-      lms21_orig_r_up = render.get_Landmarks(hand_joints_r_up)       
+        global_orient_coeff_r_up, pose_coeff_r, betas_coeff_r, global_transl_coeff_r_up  = \
+        render.Split_coeff(params.view(-1, params.size(2)),ind_pred.view(-1))
+      hand_verts_pred_l, hand_joints_pred_l = render.mano_layer_left(global_orient_coeff_l_up, pose_coeff_l, betas_coeff_l, global_transl_coeff_l_up, side ='left')
+      hand_verts_pred_r, hand_joints_pred_r = render.mano_layer_right(global_orient_coeff_r_up, pose_coeff_r, betas_coeff_r,global_transl_coeff_r_up, side ='right')    
 
       if opt.pick_hand:
           # assign left/right hand
           handmap = _sigmoid(outputs[0]['handmap'])
-          hand_label_pred = _tranpose_and_gather_feat(handmap, ind)
+          hand_label_pred = _tranpose_and_gather_feat(handmap, ind_pred)
 
           handness = torch.zeros((hand_label_pred.shape[1], )).to('cuda') + 5
           for h_id in range(hand_label_pred.shape[1]):
@@ -146,17 +166,18 @@ def main(opt):
                   handness[h_id] = 1 
       else: # single right hand
         handness = torch.ones((C, )).to('cuda')
-      idx_lms = handness.unsqueeze(1).unsqueeze(2).expand_as(lms21_orig_r_up)
-      lms21_all = torch.where(idx_lms==0,lms21_orig_l_up,lms21_orig_r_up)
-      idx_verts = handness.unsqueeze(1).unsqueeze(2).expand_as(hand_verts_r_up)
-      verts_all = torch.where(idx_verts==0,hand_verts_l_up,hand_verts_r_up)
-      idx_joints = handness.unsqueeze(1).unsqueeze(2).expand_as(hand_joints_r_up)
-      joints_all = torch.where(idx_joints==0,hand_joints_l_up,hand_joints_r_up)              
+
+      idx_verts = handness.reshape(-1,1).unsqueeze(2).expand_as(hand_verts_pred_r)
+      verts_all = torch.where(idx_verts==0,hand_verts_pred_l,hand_verts_pred_r)
+      idx_joints = handness.reshape(-1,1).unsqueeze(2).expand_as(hand_joints_pred_r)
+      joints_all = torch.where(idx_joints==0,hand_joints_pred_l,hand_joints_pred_r)
+
+      lms21_pred = render.get_Landmarks(joints_all) 
 
       if opt.photometric_loss:
-          pre_textures = _tranpose_and_gather_feat(outputs[0]['texture'], ind)
+          pre_textures = _tranpose_and_gather_feat(outputs[0]['texture'], ind_pred)
           device = pre_textures.device
-          render.gamma = _tranpose_and_gather_feat(outputs[0]['light'], ind)
+          render.gamma = _tranpose_and_gather_feat(outputs[0]['light'], ind_pred)
           Albedo = pre_textures.view(-1,778,3) #[b, 778, 3]
           texture_mean = torch.tensor([0.45,0.35,0.3]).float().to(device)
           texture_mean = texture_mean.unsqueeze(0).unsqueeze(0).repeat(1,Albedo.shape[1],1)#[1, 778, 3]
@@ -199,10 +220,10 @@ def main(opt):
 
 
       # vis
-      drawCirclev2(image,lms21_all.reshape(-1,2),(0,0,255),1)  
+      drawCirclev2(image,lms21_pred.reshape(-1,2),(0,0,255),1)  
       save_path = os.path.join(folder,fname)
-      for k in range(len(ind[0])):
-          image = showHandJoints(image,lms21_all[k].detach().cpu().numpy(),save_path)
+      for k in range(len(ind_pred[0])):
+          image = showHandJoints(image,lms21_pred[k].detach().cpu().numpy(),save_path)
 
 
       if opt.photometric_loss and rendered is not None:
@@ -285,7 +306,7 @@ def showHandJoints(imgInOrg, gtIn, filename=None):
 
     PYTHON_VERSION = sys.version_info[0]
 
-    gtIn = np.round(gtIn).astype(np.int)
+    gtIn = np.round(gtIn).astype(np.int32)
 
     if gtIn.shape[0]==1:
         imgIn = cv2.circle(imgIn, center=(gtIn[0][0], gtIn[0][1]), radius=3, color=joint_color_code[0],

@@ -20,6 +20,7 @@ from pytorch3d.renderer import (
 from lib.models.hand3d.RenderDepthRgbMask import RenderDepthRgbMask
 from lib.models.hand3d.Mano_model import ManoModel
 from lib.models.hand3d.Mano_model import to_np
+from lib.models.networks.manolayer import ManoLayer, rodrigues_batch
 
 class ManoRender(nn.Module):
   def __init__(self, opt):
@@ -30,29 +31,38 @@ class ManoRender(nn.Module):
     else:
       self.input_res = opt.input_res
 
-    rhm_path = os.path.join(os.path.dirname(__file__), 'mano_core/MANO_RIGHT.pkl')
-    lhm_path = os.path.join(os.path.dirname(__file__), 'mano_core/MANO_LEFT.pkl')
-
+    self.rhm_path = os.path.join(os.path.dirname(__file__), 'mano_core/MANO_RIGHT.pkl')
+    self.lhm_path = os.path.join(os.path.dirname(__file__), 'mano_core/MANO_LEFT.pkl')
+    mano_path = {'left': self.lhm_path, 'right': self.rhm_path}   
     # pca = 30 is saturates as <Learning joint reconstruction of hands and manipulated objects> says
     n_comps = 45 if not opt.using_pca else opt.num_pca_comps # modified to 6 from 30/45 
-    if self.opt.dataset == 'HO3D':
-      bool_flat_hand_mean = True
-    else:
-      bool_flat_hand_mean = False
+    # if self.opt.dataset == 'HO3D':
+    #   bool_flat_hand_mean = True
+    # else:
+    bool_flat_hand_mean = False # we reduce it in get_item.
     
         
-    self.MANO_R = ManoModel(model_path=rhm_path,
+    self.MANO_R = ManoModel(model_path=self.rhm_path,
                   num_pca_comps=n_comps,
-                  flat_hand_mean=False,
+                  flat_hand_mean=bool_flat_hand_mean,
                   use_pca=opt.using_pca)
-    self.MANO_GT = ManoModel(model_path=rhm_path,
+    self.MANO_GT = ManoModel(model_path=self.rhm_path,
                   num_pca_comps=n_comps,
                   flat_hand_mean=bool_flat_hand_mean,   # False for FreiHAND and True for HO3D
                   use_pca=opt.using_pca) 
-    self.MANO_L = ManoModel(model_path=lhm_path,
+    self.MANO_L = ManoModel(model_path=self.lhm_path,
               num_pca_comps=n_comps,
-              flat_hand_mean=False,
+              flat_hand_mean=bool_flat_hand_mean,
               use_pca=opt.using_pca)
+    
+
+    self.mano_layer_left = ManoLayer(mano_path['left'], center_idx=None, use_pca=False)
+    self.mano_layer_right = ManoLayer(mano_path['right'], center_idx=None, use_pca=False)
+
+    # this is for InterHandNew dataset, shape. H2O dataset may not neccessary.
+    # if torch.sum(torch.abs(self.MANO_L.shapedirs[:,0,:] - self.MANO_R.shapedirs[:,0,:])) < 1:
+    #     print('Fix shapedirs bug of MANO')
+    #     self.MANO_L.shapedirs[:,0,:] *= -1
 
     weight = np.array([20,20,1,1,1,1,1,1,20,20,
                       1,1,1,1,1,1,20,20,
@@ -101,7 +111,7 @@ class ManoRender(nn.Module):
     )
 
     # renderer
-    B = opt.batch_size // len(opt.gpus)
+    B = opt.batch_size #// len(opt.gpus)
     self.B = B
     cameras = SfMPerspectiveCameras(focal_length=self.fl,
                                     R=self.ptR.expand(B, -1, -1),
@@ -150,19 +160,21 @@ class ManoRender(nn.Module):
       global_orient_coeff_l_up =  theta[:, :3] 
       pose_coeff_l =  theta[:, 3:48] 
       betas_coeff_l =  theta[:, 48:58] # TEST with shape   
-      global_transl_coeff_l_up = theta[:, 58:61] / 10 if self.opt.dataset == 'HO3D' or self.opt.task == 'artificial' else theta[:, 58:61]
-      global_transl_coeff_l_up[:,2] = global_transl_coeff_l_up[:,2] + 0.6
+      global_transl_coeff_l_up = theta[:, 58:61] 
+      global_transl_coeff_l_up[:,2] = global_transl_coeff_l_up[:,2] + 0.8
       # ---------------left-right------------------
       global_orient_coeff_r_up =  theta[:, 61:64]  
       pose_coeff_r =  theta[:, 64:109]
       betas_coeff_r =  theta[:, 109:119] # TEST with shape
-      global_transl_coeff_r_up = theta[:, 119:122] / 10 if self.opt.dataset == 'HO3D' or self.opt.task == 'artificial' else theta[:, 119:122] 
-      global_transl_coeff_r_up[:,2] = global_transl_coeff_r_up[:,2] + 0.6
+      global_transl_coeff_r_up = theta[:, 119:122] 
+      global_transl_coeff_r_up[:,2] = global_transl_coeff_r_up[:,2] + 0.8
 
     # attention for tranlation:
     # (c + 10)(a + cx - w/2) / f, (c + 10)(b + h/2 - cy) / f, c + 10 --> t_x, t_y, t_z    
     cx = (index % (self.input_res // self.opt.down_ratio)) * self.opt.down_ratio
     cy = (index // (self.input_res // self.opt.down_ratio)) * self.opt.down_ratio
+    # cx = (index % (self.input_res // self.opt.down_ratio) + off_hm_pred[:,0]) * self.opt.down_ratio
+    # cy = (index // (self.input_res // self.opt.down_ratio) + off_hm_pred[:,1]) * self.opt.down_ratio    
     w, h = self.input_res, self.input_res
     ret_global_transl_coeff_r_up_x = global_transl_coeff_r_up[:, 2] * (global_transl_coeff_r_up[:, 0] + cx - w/2) / self.f
     ret_global_transl_coeff_r_up_y = global_transl_coeff_r_up[:, 2] * (global_transl_coeff_r_up[:, 1] + cy - h/2) / self.f
@@ -171,7 +183,7 @@ class ManoRender(nn.Module):
     ret_global_transl_coeff_l_up_y = global_transl_coeff_l_up[:, 2] * (global_transl_coeff_l_up[:, 1] + cy - h/2) / self.f
     ret_global_transl_coeff_l_up = torch.cat((ret_global_transl_coeff_l_up_x.unsqueeze(1), ret_global_transl_coeff_l_up_y.unsqueeze(1), global_transl_coeff_l_up[:,2].unsqueeze(1)),1)
 
-    if self.opt.task == 'artificial':
+    if self.opt.task == 'artificial' or True:
       return global_orient_coeff_l_up, pose_coeff_l, betas_coeff_l, ret_global_transl_coeff_l_up, \
           global_orient_coeff_r_up, pose_coeff_r, betas_coeff_r, ret_global_transl_coeff_r_up
     else:
@@ -184,9 +196,20 @@ class ManoRender(nn.Module):
     projection = Shape.bmm(K.transpose(2, 1)).contiguous()
     projection_ = projection[..., :2] / ( projection[..., 2:])
     return projection_
+
+  def get_Landmarks_new(self, Shape, K):
+    b = Shape.size(0)
+    K = K.reshape(-1, 3, 3)
+    assert K.shape[0] == b
+    projection = Shape.bmm(K.transpose(2, 1)).contiguous()
+    projection_ = projection[..., :2] / ( projection[..., 2:] + 1e-7)
+    return projection_       
   
   def get_uv_root_3d(self, gt_uv_scale, gt_K):
+    gt_K = gt_K.reshape(gt_uv_scale.shape[0],1,-1)
     focal = 0.5 * (gt_K[:,0,0] + gt_K[:,0,4])
+    if gt_K[-1].max()==0:
+      print('hello')
     cx = gt_K[:,0,2]
     cy = gt_K[:,0,5]
     gt_uv_root = gt_uv_scale[:,:2]
@@ -194,13 +217,13 @@ class ManoRender(nn.Module):
     device = gt_uv_root.device
     b = gt_uv_root.size(0)
     # init depth to 0.6
-    depth = focal / gt_scale
-    X = (gt_uv_root[:,0] - cx) / focal * depth
-    Y = (gt_uv_root[:,1] - cy) / focal * depth
+    depth = focal / (gt_scale+1e-6)
+    X = (gt_uv_root[:,0] - cx) / (focal+1e-6) * depth
+    Y = (gt_uv_root[:,1] - cy) / (focal+1e-6) * depth
     return torch.stack([X,Y,depth], 1)
 
-  def Shape_formation(self, global_orient, pose, betas, global_transl, type):
-    wrist_rotate = False
+  def Shape_formation(self, global_orient, pose, betas, global_transl, type, wrist_rotate):
+    # wrist_rotate = True
     if type == 'gt':
       output = self.MANO_GT(betas=betas,
               global_orient=global_orient,

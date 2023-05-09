@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import copy
 import os
+import random
 
 def _brightness(image, min=0.5, max=2.0):
     '''
@@ -22,6 +23,14 @@ def _brightness(image, min=0.5, max=2.0):
     hsv[:,:,2] = v_channel
 
     return cv2.cvtColor(hsv,cv2.COLOR_HSV2RGB)
+
+def add_noise(img, noise=0.00, scale=255.0, alpha=0.3, beta=0.05):
+    # add brightness noise & add random gaussian noise
+    a = np.random.uniform(1 - alpha, 1 + alpha, 3)
+    b = scale * beta * (2 * random.random() - 1)
+    img = a * img + b + scale * np.random.normal(loc=0.0, scale=noise, size=img.shape)
+    img = np.clip(img, 0, scale)
+    return img
 
 def resize_image(image, gts,igs, scale=[0.4,1.5]):
     height, width = image.shape[0:2]

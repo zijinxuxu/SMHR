@@ -41,7 +41,7 @@ class Logger(object):
       log_dir = opt.debug_dir + '/logs_{}'.format(time_str)
     else:
       log_dir = opt.save_dir + '/logs_{}'.format(time_str)
-    if USE_TENSORBOARD:
+    if USE_TENSORBOARD: # only write once:
       self.writer = tensorboardX.SummaryWriter(log_dir=log_dir)
     else:
       if not os.path.exists(os.path.dirname(log_dir)):
@@ -51,7 +51,7 @@ class Logger(object):
     self.log = open(log_dir + '/log.txt', 'w')
     try:
       os.system('cp {}/opt.txt {}/'.format(opt.save_dir, log_dir))
-      os.system('cp /home/kalyo/workplace/centerface/prepare_data/cache/joint.txt {}/'.format(log_dir))
+      # os.system('cp /home/kalyo/workplace/centerface/prepare_data/cache/joint.txt {}/'.format(log_dir))
     except:
       pass
     self.start_line = True

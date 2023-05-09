@@ -3,23 +3,22 @@ set -ex
 
 # Training
 GPU_ID=0
-NAME='MHR_demo'
-task='simplified' # simplified, artificial
-mode='test'
-dataset='HO3D' # FreiHAND, HO3D, Joint
+NAME='SMHR_eval'
+task='artificial' 
+mode='test' # train, test, eval
+dataset='FreiHAND' # modify datasets in data/joint_dataset.txt
 # Network configuration
 
 BATCH_SIZE=1
 
 # Reconstruction resolution
-# NOTE: one can change here to reconstruct mesh in a different resolution.
-Input_RES=224 # 224,384
+Input_RES=384 # 224,512
 
-CHECKPOINTS_PATH='data/HO3D-2d-simplified.pth'
+CHECKPOINTS_PATH='data/Multi_pho.pth'
 
 # command
-CUDA_VISIBLE_DEVICES=${GPU_ID} python demo.py \
-    ${task} \
+CUDA_VISIBLE_DEVICES=${GPU_ID} python -m torch.distributed.launch --master_port 12508 --nproc_per_node 1 demo.py \
+    --task ${task} \
     --gpus 0 \
     --mode ${mode} \
     --dataset ${dataset} \
@@ -27,4 +26,4 @@ CUDA_VISIBLE_DEVICES=${GPU_ID} python demo.py \
     --default_resolution ${Input_RES} \
     --photometric_loss \
     --load_model ${CHECKPOINTS_PATH} \
-    # --pick_hand \
+    --pick_hand \
