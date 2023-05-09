@@ -2,7 +2,7 @@
 # SMHR: Single-stage Multiple Hand Reconstruction with weak supervision
 
 ## Introduction
-* This repo is official **[PyTorch](https://pytorch.org)** implementation of **[End-to-end Weakly-supervised Single-stage Multiple 3D Hand Mesh Reconstruction from a Single RGB Image](https://arxiv.org/abs/2204.08154)**. 
+* This repo is official **[PyTorch](https://pytorch.org)** implementation of **[End-to-end Weakly-supervised Single-stage Multiple 3D Hand Mesh Reconstruction from a Single RGB Image](https://arxiv.org/abs/2204.08154)**. Accepted by Computer Vision and Image Understanding
 
 ### Overview of the proposed framework
 <p align="middle">
@@ -113,7 +113,8 @@ We recommend placing the dataset under the 'data' path via a soft link.
 
 ### Outputs of Multiple Hand images
 <p align="middle">
-    <img src="assets/Quantitative_results.png", width="730" height="390">
+    <img src="assets/Multi.png">
+
 </p>
 
 ## Citation
